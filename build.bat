@@ -1,7 +1,26 @@
-nasm -f win64 -o obj/hello_world.obj src/hello_world.asm
+@echo off
 
-link obj/hello_world.obj ^
+if not defined DevEnvDir (
+  call vcvarsall x64
+)
+
+echo Compiling...
+
+nasm -f win64 -gcv8 -l obj/hello.lst -o obj/hello.obj src/hello.asm
+
+echo Linking...
+
+link obj/hello.obj ^
 /subsystem:console ^
 /entry:main ^
-/out:bin/hello_world_basic.exe ^
-kernel32.lib legacy_stdio_definitions.lib msvcrt.lib
+/out:bin/hello.exe ^
+/defaultlib:ucrt.lib ^
+/defaultlib:msvcrt.lib ^
+/defaultlib:legacy_stdio_definitions.lib ^
+/defaultlib:Kernel32.lib ^
+/defaultlib:Shell32.lib ^
+/nologo ^
+/incremental:no ^
+/opt:noref ^
+/debug ^
+/pdb:"obj\hello.pdb"

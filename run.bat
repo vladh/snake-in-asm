@@ -1,1 +1,3 @@
-bin\hello_world_basic.exe
+@echo off
+
+bin\hello.exe
