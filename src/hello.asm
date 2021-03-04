@@ -7,9 +7,14 @@ segment .data
 
 board_height dq 15
 board_width dq 30
-board_icon_empty db ".", 0
 newline db 0xd, 0xa, 0
+board_icon_empty db ".", 0
+board_icon_test db "!", 0
 number_format db "%d", 0xd, 0xa, 0
+seq_clear db 0x1b, 0x5b, "2J", 0
+seq_pos db 0x1b, 0x5b, "%d;%dH", 0
+seq_blue db 0x1b, 0x5b, "34m", 0
+seq_reset db 0x1b, 0x5b, "0m", 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -71,9 +76,26 @@ main:
 
   call _CRT_INIT
 
-  push 5
-  call print_board
-  add rsp, 8 ; pop
+  mov rcx, seq_clear
+  call printf
+
+  mov rcx, seq_pos
+  mov rdx, 10
+  mov r8, 80
+  call printf
+
+  mov rcx, seq_blue
+  call printf
+
+  mov rcx, board_icon_test
+  call printf
+
+  mov rcx, seq_reset
+  call printf
+
+  ; push 5
+  ; call print_board
+  ; add rsp, 8 ; pop
 
   xor rax, rax
   mov rsp, rbp
