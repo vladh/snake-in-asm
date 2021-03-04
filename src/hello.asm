@@ -5,10 +5,11 @@ default rel
 
 segment .data
 
-list dq 1, 2, 3, 4, 5
-list_len dq 5
-fmt_list_item db "%d ", 0
-fmt_list_end db ".", 0xd, 0xa, 0
+board_height dq 15
+board_width dq 30
+board_icon_empty db ".", 0
+newline db 0xd, 0xa, 0
+number_format db "%d", 0xd, 0xa, 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -20,36 +21,61 @@ extern ExitProcess
 extern _CRT_INIT
 extern printf
 
+print_board:
+  push rbp
+  mov rbp, rsp
+  sub rsp, 32
+
+  mov rcx, number_format
+  mov rdx, [rbp + 16]
+  call printf
+
+  push r12
+  push r13
+
+  xor r12, r12
+  .height_loop:
+    cmp r12, [board_height]
+    je .end_height_loop
+
+    xor r13, r13
+    .width_loop:
+      cmp r13, [board_width]
+      je .end_width_loop
+
+      mov rcx, board_icon_empty
+      call printf
+
+      inc r13
+      jmp .width_loop
+    .end_width_loop:
+
+    mov rcx, newline
+    call printf
+
+    inc r12
+    jmp .height_loop
+  .end_height_loop:
+
+  pop r13
+  pop r12
+  xor rax, rax
+  mov rsp, rbp
+  pop rbp
+  ret
+
 main:
-  push    rbp
-  mov     rbp, rsp
-  sub     rsp, 32
+  push rbp
+  mov rbp, rsp
+  sub rsp, 32
 
-  push rbx
+  call _CRT_INIT
 
-  call    _CRT_INIT
+  push 5
+  call print_board
+  add rsp, 8 ; pop
 
-  xor     rbx, rbx
-
-.start_loop:
-
-  cmp     rbx, [list_len]
-  je      .end_loop
-
-  mov     rcx, fmt_list_item
-  mov     rdx, rbx
-  call    printf
-
-  inc     rbx
-
-  jmp     .start_loop
-
-.end_loop:
-
-  mov     rcx, fmt_list_end
-  call    printf
-
-  pop rbx
-
-  xor     rax, rax
-  call    ExitProcess
+  xor rax, rax
+  mov rsp, rbp
+  pop rbp
+  call ExitProcess
