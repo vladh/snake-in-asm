@@ -23,4 +23,4 @@ link obj/hello.obj ^
 /incremental:no ^
 /opt:noref ^
 /debug ^
-/pdb:"obj\hello.pdb"
+/pdb:"bin\hello.pdb"
