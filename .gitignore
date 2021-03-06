@@ -2,3 +2,5 @@ bin/*
 !bin/.gitkeep
 obj/*
 !obj/.gitkeep
+ctest/*
+!ctest/*.c
