@@ -26,6 +26,12 @@ INPUT_LEFT db "a"
 INPUT_RIGHT db "d"
 INPUT_QUIT db "q"
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+segment .data
+g_std_handle dd 0
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 segment .text
@@ -57,15 +63,22 @@ extern ExitProcess
 ; );
 extern SetConsoleMode
 
+; void Sleep(
+;   DWORD dwMilliseconds
+; );
+extern Sleep
+
+; BOOL WINAPI GetNumberOfConsoleInputEvents(
+;   _In_  HANDLE  hConsoleInput,
+;   _Out_ LPDWORD lpcNumberOfEvents
+; );
+extern GetNumberOfConsoleInputEvents
+
 extern _CRT_INIT
 extern printf
 
 
-read_char:
-.char equ 16
-.nBytesRead equ 24
-.handle equ 32
-.scratch equ 40
+setup_input:
   push rbp
   mov rbp, rsp
   sub rsp, 32
@@ -73,22 +86,48 @@ read_char:
   ; Get the standard input handle
   mov rcx, [STD_INPUT_HANDLE] ; nStdHandle
   call GetStdHandle
-  mov [rbp + .handle], rax
+  mov [g_std_handle], rax
 
   ; Disable all input modes
   ; This means the typed character won't be printed, and we also will not
   ; wait for an <Enter> after it.
-  mov rcx, rax ; hConsoleHandle
+  mov rcx, [g_std_handle] ; hConsoleHandle
   mov rdx, 0 ; dwMode
   call SetConsoleMode
 
+  mov rsp, rbp
+  pop rbp
+  ret
+
+
+read_char:
+; rbp +
+.char equ 16
+.nBytesRead equ 24
+.nEvents equ 32
+; rsp +
+.scratch equ 32
+  push rbp
+  mov rbp, rsp
+  sub rsp, 64
+
+  ; Get the number of input events
+  mov rcx, [g_std_handle]
+  lea rdx, [rbp + .nEvents]
+  call GetNumberOfConsoleInputEvents
+
+  cmp byte [rbp + .nEvents], 0
+  je .done_reading
+
   ; Read the character
-  mov rcx, [rbp + .handle] ; hFile
+  mov rcx, [g_std_handle] ; hFile
   lea rdx, [rbp + .char] ; lpBuffer
   mov r8, 1 ; nNumberOfBytesToRead
   lea r9, [rbp + .nBytesRead] ; lpNumberOfBytesRead
-  mov qword [rbp + .scratch], 0 ; lpOverlapped
+  mov qword [rsp + .scratch], 0 ; lpOverlapped
   call ReadFile
+
+  .done_reading:
 
   mov rax, [rbp + .char]
   mov rsp, rbp
@@ -182,21 +221,34 @@ main:
 .head_y equ 40
 .food_x equ 48
 .food_y equ 56
+.dir_x equ 64
+.dir_y equ 52
   push rbp
   mov rbp, rsp
-  sub rsp, 64
+  sub rsp, 128
 
   call _CRT_INIT
 
-  ; Init positions
+  ; Clear board and setup input
+  call clear_board
+  call setup_input
+
+  ; Init data
   mov byte [rsp + .head_x], 10
   mov byte [rsp + .head_y], 3
   mov byte [rsp + .food_x], 10
   mov byte [rsp + .food_x], 5
+  mov byte [rsp + .dir_x], 1
+  mov byte [rsp + .dir_y], 0
 
   .loop:
-    ; Clear and print board
-    call clear_board
+    ; Reset position to 0, 0
+    mov rdx, 0
+    mov r8, 0
+    mov rcx, SEQ_POS
+    call printf
+
+    ; Print board
     call print_board
 
     ; Print food
@@ -211,11 +263,15 @@ main:
     mov r8, BOARD_ICON_HEAD ; char
     call print_char
 
-    ; Reset position to 0, 0
-    mov rdx, 0
-    mov r8, 0
-    mov rcx, SEQ_POS
-    call printf
+    ; Move snake
+    xor rcx, rcx
+    add rcx, [rsp + .dir_x]
+    add rcx, [rsp + .head_x]
+    mov [rsp + .head_x], rcx
+    xor rcx, rcx
+    add rcx, [rsp + .dir_y]
+    add rcx, [rsp + .head_y]
+    mov [rsp + .head_y], rcx
 
     ; Read character
     call read_char
@@ -234,25 +290,28 @@ main:
     jmp .end_input
 
     .action_up:
-    dec byte [rsp + .head_y]
+    ; dec byte [rsp + .head_y]
     jmp .end_input
 
     .action_down:
-    inc byte [rsp + .head_y]
+    ; inc byte [rsp + .head_y]
     jmp .end_input
 
     .action_left:
-    dec byte [rsp + .head_x]
+    ; dec byte [rsp + .head_x]
     jmp .end_input
 
     .action_right:
-    inc byte [rsp + .head_x]
+    ; inc byte [rsp + .head_x]
     jmp .end_input
 
     .action_quit:
     jmp .end_loop
 
     .end_input:
+
+    mov rcx, 50
+    call Sleep
     jmp .loop
   .end_loop:
 
