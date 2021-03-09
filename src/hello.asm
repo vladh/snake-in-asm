@@ -12,6 +12,7 @@ BOARD_ICON_EMPTY db ".", 0
 BOARD_ICON_FOOD db "*", 0
 BOARD_ICON_HEAD db "O", 0
 FMT_INT db "%d", 0xd, 0xa, 0
+FMT_SHORT db "%hd", 0xd, 0xa, 0
 FMT_UINT db "%u", 0xd, 0xa, 0
 FMT_CHAR db "%c", 0xd, 0xa, 0
 FMT_STRING db "%s", 0xd, 0xa, 0
@@ -25,7 +26,15 @@ INPUT_DOWN db "s"
 INPUT_LEFT db "a"
 INPUT_RIGHT db "d"
 INPUT_QUIT db "q"
-
+VKEY_W equ 0x57
+VKEY_A equ 0x41
+VKEY_S equ 0x53
+VKEY_D equ 0x44
+VKEY_Q equ 0x51
+DIR_UP equ 1
+DIR_DOWN equ 2
+DIR_LEFT equ 3
+DIR_RIGHT equ 4
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -43,36 +52,25 @@ global main
 ; );
 extern GetStdHandle
 
-; BOOL WINAPI ReadFile(
-;   _In_        HANDLE       hFile,
-;   _Out_       LPVOID       lpBuffer,
-;   _In_        DWORD        nNumberOfBytesToRead,
-;   _Out_opt_   LPDWORD      lpNumberOfBytesRead,
-;   _Inout_opt_ LPOVERLAPPED lpOverlapped
+; BOOL WINAPI FlushConsoleInputBuffer(
+;   _In_ HANDLE hConsoleInput
 ; );
-extern ReadFile
+extern FlushConsoleInputBuffer
 
 ; VOID WINAPI ExitProcess(
 ;   _In_ UINT uExitCode
 ; );
 extern ExitProcess
 
-; BOOL WINAPI SetConsoleMode(
-;   _In_ HANDLE hConsoleHandle,
-;   _In_ DWORD  dwMode
-; );
-extern SetConsoleMode
-
 ; void Sleep(
 ;   DWORD dwMilliseconds
 ; );
 extern Sleep
 
-; BOOL WINAPI GetNumberOfConsoleInputEvents(
-;   _In_  HANDLE  hConsoleInput,
-;   _Out_ LPDWORD lpcNumberOfEvents
+; SHORT GetAsyncKeyState(
+;   int vKey
 ; );
-extern GetNumberOfConsoleInputEvents
+extern GetAsyncKeyState
 
 extern _CRT_INIT
 extern printf
@@ -88,48 +86,6 @@ setup_input:
   call GetStdHandle
   mov [g_std_handle], rax
 
-  ; Disable all input modes
-  ; This means the typed character won't be printed, and we also will not
-  ; wait for an <Enter> after it.
-  mov rcx, [g_std_handle] ; hConsoleHandle
-  mov rdx, 0 ; dwMode
-  call SetConsoleMode
-
-  mov rsp, rbp
-  pop rbp
-  ret
-
-
-read_char:
-; rbp +
-.char equ 16
-.nBytesRead equ 24
-.nEvents equ 32
-; rsp +
-.scratch equ 32
-  push rbp
-  mov rbp, rsp
-  sub rsp, 64
-
-  ; Get the number of input events
-  mov rcx, [g_std_handle]
-  lea rdx, [rbp + .nEvents]
-  call GetNumberOfConsoleInputEvents
-
-  cmp byte [rbp + .nEvents], 0
-  je .done_reading
-
-  ; Read the character
-  mov rcx, [g_std_handle] ; hFile
-  lea rdx, [rbp + .char] ; lpBuffer
-  mov r8, 1 ; nNumberOfBytesToRead
-  lea r9, [rbp + .nBytesRead] ; lpNumberOfBytesRead
-  mov qword [rsp + .scratch], 0 ; lpOverlapped
-  call ReadFile
-
-  .done_reading:
-
-  mov rax, [rbp + .char]
   mov rsp, rbp
   pop rbp
   ret
@@ -221,8 +177,7 @@ main:
 .head_y equ 40
 .food_x equ 48
 .food_y equ 56
-.dir_x equ 64
-.dir_y equ 52
+.dir equ 64
   push rbp
   mov rbp, rsp
   sub rsp, 128
@@ -238,8 +193,7 @@ main:
   mov byte [rsp + .head_y], 3
   mov byte [rsp + .food_x], 10
   mov byte [rsp + .food_x], 5
-  mov byte [rsp + .dir_x], 1
-  mov byte [rsp + .dir_y], 0
+  mov byte [rsp + .dir], 4 ; right
 
   .loop:
     ; Reset position to 0, 0
@@ -247,6 +201,11 @@ main:
     mov r8, 0
     mov rcx, SEQ_POS
     call printf
+
+    ; Flush buffer
+    ; This is apparently bad/deprecated, but do we care? No!
+    mov rcx, [g_std_handle]
+    call FlushConsoleInputBuffer
 
     ; Print board
     call print_board
@@ -264,45 +223,69 @@ main:
     call print_char
 
     ; Move snake
-    xor rcx, rcx
-    add rcx, [rsp + .dir_x]
-    add rcx, [rsp + .head_x]
-    mov [rsp + .head_x], rcx
-    xor rcx, rcx
-    add rcx, [rsp + .dir_y]
-    add rcx, [rsp + .head_y]
-    mov [rsp + .head_y], rcx
+    cmp byte [rsp + .dir], DIR_UP
+    jne .check_down
+    sub byte [rsp + .head_y], 1
 
-    ; Read character
-    call read_char
+    .check_down:
+    cmp byte [rsp + .dir], DIR_DOWN
+    jne .check_left
+    add byte [rsp + .head_y], 1
 
-    ; Do something with character
-    cmp al, [INPUT_UP]
-    je .action_up
-    cmp al, [INPUT_DOWN]
-    je .action_down
-    cmp al, [INPUT_LEFT]
-    je .action_left
-    cmp al, [INPUT_RIGHT]
-    je .action_right
-    cmp al, [INPUT_QUIT]
-    je .action_quit
+    .check_left:
+    cmp byte [rsp + .dir], DIR_LEFT
+    jne .check_right
+    sub byte [rsp + .head_x], 1
+
+    .check_right:
+    cmp byte [rsp + .dir], DIR_RIGHT
+    jne .end_checks
+    add byte [rsp + .head_x], 1
+
+    .end_checks:
+
+    ; Check keys pressed
+    mov rcx, VKEY_W
+    call GetAsyncKeyState
+    cmp rax, 0
+    jne .action_up
+
+    mov rcx, VKEY_S
+    call GetAsyncKeyState
+    cmp rax, 0
+    jne .action_down
+
+    mov rcx, VKEY_A
+    call GetAsyncKeyState
+    cmp rax, 0
+    jne .action_left
+
+    mov rcx, VKEY_D
+    call GetAsyncKeyState
+    cmp rax, 0
+    jne .action_right
+
+    mov rcx, VKEY_Q
+    call GetAsyncKeyState
+    cmp rax, 0
+    jne .action_quit
+
     jmp .end_input
 
     .action_up:
-    ; dec byte [rsp + .head_y]
+    mov byte [rsp + .dir], 1
     jmp .end_input
 
     .action_down:
-    ; inc byte [rsp + .head_y]
+    mov byte [rsp + .dir], 2
     jmp .end_input
 
     .action_left:
-    ; dec byte [rsp + .head_x]
+    mov byte [rsp + .dir], 3
     jmp .end_input
 
     .action_right:
-    ; inc byte [rsp + .head_x]
+    mov byte [rsp + .dir], 4
     jmp .end_input
 
     .action_quit:
@@ -316,6 +299,8 @@ main:
   .end_loop:
 
   call clear_board
+
+  .end:
 
   xor rax, rax
   mov rsp, rbp

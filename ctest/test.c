@@ -1,11 +1,14 @@
-int var1 = 5;
-int var2;
+#include <windows.h>
+#include <stdio.h>
 
 int main() {
-  var1 = 3;
-  var2 = 10;
-  int var3 = var1 + var2;
-  int var4 = 3;
-  int var5;
+  while (TRUE) {
+    if (GetAsyncKeyState(0x57) & 0x01) {
+      printf("yes\n");
+    } else {
+      /* printf("no\n"); */
+    }
+  }
+
   return 0;
 }

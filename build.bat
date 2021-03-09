@@ -19,6 +19,7 @@ link obj/hello.obj ^
 /defaultlib:legacy_stdio_definitions.lib ^
 /defaultlib:Kernel32.lib ^
 /defaultlib:Shell32.lib ^
+/defaultlib:User32.lib ^
 /nologo ^
 /incremental:no ^
 /opt:noref ^
