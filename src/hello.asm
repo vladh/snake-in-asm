@@ -5,10 +5,10 @@ default rel
 
 segment .rodata
 
-BOARD_HEIGHT dq 15
-BOARD_WIDTH dq 30
+BOARD_HEIGHT dq 30
+BOARD_WIDTH dq 45
 NEWLINE db 0xd, 0xa, 0
-BOARD_ICON_EMPTY db ".", 0
+BOARD_ICON_EMPTY db ". ", 0
 BOARD_ICON_FOOD db "*", 0
 BOARD_ICON_HEAD db "O", 0
 FMT_INT db "%d", 0xd, 0xa, 0
@@ -35,6 +35,7 @@ DIR_UP equ 1
 DIR_DOWN equ 2
 DIR_LEFT equ 3
 DIR_RIGHT equ 4
+KEY_DOWN_VALUE equ 0b1000000000000000
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -247,26 +248,31 @@ main:
     ; Check keys pressed
     mov rcx, VKEY_W
     call GetAsyncKeyState
+    and rax, KEY_DOWN_VALUE
     cmp rax, 0
     jne .action_up
 
     mov rcx, VKEY_S
     call GetAsyncKeyState
+    and rax, KEY_DOWN_VALUE
     cmp rax, 0
     jne .action_down
 
     mov rcx, VKEY_A
     call GetAsyncKeyState
+    and rax, KEY_DOWN_VALUE
     cmp rax, 0
     jne .action_left
 
     mov rcx, VKEY_D
     call GetAsyncKeyState
+    and rax, KEY_DOWN_VALUE
     cmp rax, 0
     jne .action_right
 
     mov rcx, VKEY_Q
     call GetAsyncKeyState
+    and rax, KEY_DOWN_VALUE
     cmp rax, 0
     jne .action_quit
 
