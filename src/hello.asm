@@ -9,8 +9,8 @@ BOARD_HEIGHT dq 30
 BOARD_WIDTH dq 45
 NEWLINE db 0xd, 0xa, 0
 BOARD_ICON_EMPTY db ". ", 0
-BOARD_ICON_FOOD db "*", 0
-BOARD_ICON_HEAD db "O", 0
+BOARD_ICON_FOOD db "* ", 0
+BOARD_ICON_HEAD db "O ", 0
 FMT_INT db "%d", 0xd, 0xa, 0
 FMT_SHORT db "%hd", 0xd, 0xa, 0
 FMT_UINT db "%u", 0xd, 0xa, 0
@@ -20,6 +20,10 @@ SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
 SEQ_RESET db 0x1b, 0x5b, "0m", 0
+SEQ_HIDE_CURSOR db 0x1b, 0x5b, "?25l", 0
+SEQ_SHOW_CURSOR db 0x1b, 0x5b, "?25h", 0
+SEQ_USE_ALT_BUFFER db 0x1b, 0x5b, "?1049h", 0
+SEQ_USE_MAIN_BUFFER db 0x1b, 0x5b, "?1049l", 0
 STD_INPUT_HANDLE dq -10
 INPUT_UP db "w"
 INPUT_DOWN db "s"
@@ -40,7 +44,11 @@ KEY_DOWN_VALUE equ 0b1000000000000000
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 segment .data
-g_std_handle dd 0
+g_std_handle dq 0
+g_head_x dq 10
+g_head_y dq 3
+g_food_x dq 10
+g_food_y dq 5
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -73,6 +81,9 @@ extern Sleep
 ; );
 extern GetAsyncKeyState
 
+; _Post_equals_last_error_ DWORD GetLastError();
+extern GetLastError
+
 extern _CRT_INIT
 extern printf
 
@@ -82,17 +93,44 @@ setup_input:
   mov rbp, rsp
   sub rsp, 32
 
+  ; Use alternate buffer
+  mov rcx, SEQ_USE_ALT_BUFFER
+  call printf
+
   ; Get the standard input handle
   mov rcx, [STD_INPUT_HANDLE] ; nStdHandle
   call GetStdHandle
   mov [g_std_handle], rax
+
+  ; Hide the cursor
+  mov rcx, SEQ_HIDE_CURSOR
+  call printf
 
   mov rsp, rbp
   pop rbp
   ret
 
 
-clear_board:
+reset_input:
+  push rbp
+  mov rbp, rsp
+  sub rsp, 32
+
+  ; Flush buffer so we don't get a bunch of characters printed
+  ; This is apparently bad/deprecated, but do we care? No!
+  mov rcx, [g_std_handle]
+  call FlushConsoleInputBuffer
+
+  ; Switch back to main buffer
+  mov rcx, SEQ_USE_MAIN_BUFFER
+  call printf
+
+  mov rsp, rbp
+  pop rbp
+  ret
+
+
+clear_screen:
   push rbp
   mov rbp, rsp
   sub rsp, 32
@@ -139,8 +177,8 @@ print_board:
   mov rbp, rsp
   sub rsp, 32
 
-  mov [rsp + .r12_storage], r12
-  mov [rsp + .r13_storage], r13
+  mov [rbp + .r12_storage], r12
+  mov [rbp + .r13_storage], r13
 
   xor r12, r12
   .height_loop:
@@ -152,8 +190,30 @@ print_board:
       cmp r13, [BOARD_WIDTH]
       je .end_width_loop
 
+      .maybe_print_head:
+      cmp r13, [g_head_x]
+      jne .maybe_print_food
+      cmp r12, [g_head_y]
+      jne .maybe_print_food
+      mov rcx, BOARD_ICON_HEAD
+      call printf
+      jmp .end_print
+
+      .maybe_print_food:
+      cmp r13, [g_food_x]
+      jne .print_empty
+      cmp r12, [g_food_y]
+      jne .print_empty
+      mov rcx, BOARD_ICON_FOOD
+      call printf
+      jmp .end_print
+
+      .print_empty:
       mov rcx, BOARD_ICON_EMPTY
       call printf
+      jmp .end_print
+
+      .end_print:
 
       inc r13
       jmp .width_loop
@@ -166,35 +226,27 @@ print_board:
     jmp .height_loop
   .end_height_loop:
 
-  mov r12, [rsp + .r12_storage]
-  mov r13, [rsp + .r13_storage]
+  mov r12, [rbp + .r12_storage]
+  mov r13, [rbp + .r13_storage]
   mov rsp, rbp
   pop rbp
   ret
 
 
 main:
-.head_x equ 32
-.head_y equ 40
-.food_x equ 48
-.food_y equ 56
-.dir equ 64
+.dir equ 16
   push rbp
   mov rbp, rsp
-  sub rsp, 128
+  sub rsp, 32
 
   call _CRT_INIT
 
   ; Clear board and setup input
-  call clear_board
+  call clear_screen
   call setup_input
 
   ; Init data
-  mov byte [rsp + .head_x], 10
-  mov byte [rsp + .head_y], 3
-  mov byte [rsp + .food_x], 10
-  mov byte [rsp + .food_x], 5
-  mov byte [rsp + .dir], 4 ; right
+  mov byte [rbp + .dir], 4 ; right
 
   .loop:
     ; Reset position to 0, 0
@@ -203,45 +255,28 @@ main:
     mov rcx, SEQ_POS
     call printf
 
-    ; Flush buffer
-    ; This is apparently bad/deprecated, but do we care? No!
-    mov rcx, [g_std_handle]
-    call FlushConsoleInputBuffer
-
     ; Print board
     call print_board
 
-    ; Print food
-    mov rcx, [rsp + .food_x] ; x
-    mov rdx, [rsp + .food_y] ; y
-    mov r8, BOARD_ICON_FOOD ; char
-    call print_char
-
-    ; Print head
-    mov rcx, [rsp + .head_x] ; x
-    mov rdx, [rsp + .head_y] ; y
-    mov r8, BOARD_ICON_HEAD ; char
-    call print_char
-
     ; Move snake
-    cmp byte [rsp + .dir], DIR_UP
+    cmp byte [rbp + .dir], DIR_UP
     jne .check_down
-    sub byte [rsp + .head_y], 1
+    sub byte [g_head_y], 1
 
     .check_down:
-    cmp byte [rsp + .dir], DIR_DOWN
+    cmp byte [rbp + .dir], DIR_DOWN
     jne .check_left
-    add byte [rsp + .head_y], 1
+    add byte [g_head_y], 1
 
     .check_left:
-    cmp byte [rsp + .dir], DIR_LEFT
+    cmp byte [rbp + .dir], DIR_LEFT
     jne .check_right
-    sub byte [rsp + .head_x], 1
+    sub byte [g_head_x], 1
 
     .check_right:
-    cmp byte [rsp + .dir], DIR_RIGHT
+    cmp byte [rbp + .dir], DIR_RIGHT
     jne .end_checks
-    add byte [rsp + .head_x], 1
+    add byte [g_head_x], 1
 
     .end_checks:
 
@@ -279,19 +314,19 @@ main:
     jmp .end_input
 
     .action_up:
-    mov byte [rsp + .dir], 1
+    mov byte [rbp + .dir], 1
     jmp .end_input
 
     .action_down:
-    mov byte [rsp + .dir], 2
+    mov byte [rbp + .dir], 2
     jmp .end_input
 
     .action_left:
-    mov byte [rsp + .dir], 3
+    mov byte [rbp + .dir], 3
     jmp .end_input
 
     .action_right:
-    mov byte [rsp + .dir], 4
+    mov byte [rbp + .dir], 4
     jmp .end_input
 
     .action_quit:
@@ -304,7 +339,8 @@ main:
     jmp .loop
   .end_loop:
 
-  call clear_board
+  ; call clear_screen
+  call reset_input
 
   .end:
 
