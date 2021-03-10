@@ -17,6 +17,7 @@ FMT_UINT db "%u", 0xd, 0xa, 0
 FMT_CHAR db "%c", 0xd, 0xa, 0
 FMT_STRING db "%s", 0xd, 0xa, 0
 FMT_SCORE db "Score: %d", 0xd, 0xa, 0
+FMT_SPEED db "Speed: %d%%", 0xd, 0xa, 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
@@ -41,6 +42,9 @@ DIR_DOWN equ 2
 DIR_LEFT equ 3
 DIR_RIGHT equ 4
 KEY_DOWN_VALUE equ 0b1000000000000000
+BASE_WAIT_TIME equ 50
+MIN_WAIT_TIME equ 5
+SPEED_INCREMENT equ 1
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -52,6 +56,7 @@ g_food_x dq 10
 g_food_y dq 5
 g_dir dq 4 ; right
 g_score dq 0
+g_speed db 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -245,6 +250,25 @@ print_board:
   mov rdx, [g_score]
   call printf
 
+  ; Print speed
+  mov rdx, 2
+  mov r8, (BOARD_WIDTH * 2) + 2
+  mov rcx, SEQ_POS
+  call printf
+
+  ; Get speed percentage out of the max speed
+  mov eax, [g_speed]
+  mov ecx, 100
+  mul ecx
+
+  xor edx, edx
+  mov ecx, BASE_WAIT_TIME - MIN_WAIT_TIME
+  div ecx
+
+  mov rcx, FMT_SPEED
+  mov edx, eax
+  call printf
+
   mov r12, [rbp + .r12_storage]
   mov r13, [rbp + .r13_storage]
   mov rsp, rbp
@@ -340,6 +364,10 @@ update_game_data:
   jne .end_eat
   call reposition_fruit
   inc qword [g_score]
+  cmp byte [g_speed], BASE_WAIT_TIME - MIN_WAIT_TIME - SPEED_INCREMENT
+  jg .end_wait_change
+  add byte [g_speed], SPEED_INCREMENT
+  .end_wait_change:
   jmp .end_eat
 
   .end_eat:
@@ -418,7 +446,8 @@ main:
 
     .end_input:
 
-    mov rcx, 50
+    mov rcx, BASE_WAIT_TIME
+    sub rcx, [g_speed]
     call Sleep
     jmp .loop
   .end_loop:
