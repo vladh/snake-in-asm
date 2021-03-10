@@ -5,8 +5,8 @@ default rel
 
 segment .rodata
 
-BOARD_HEIGHT dq 30
-BOARD_WIDTH dq 45
+BOARD_HEIGHT equ 30
+BOARD_WIDTH equ 45
 NEWLINE db 0xd, 0xa, 0
 BOARD_ICON_EMPTY db ". ", 0
 BOARD_ICON_FOOD db "* ", 0
@@ -16,6 +16,7 @@ FMT_SHORT db "%hd", 0xd, 0xa, 0
 FMT_UINT db "%u", 0xd, 0xa, 0
 FMT_CHAR db "%c", 0xd, 0xa, 0
 FMT_STRING db "%s", 0xd, 0xa, 0
+FMT_SCORE db "Score: %d", 0xd, 0xa, 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
@@ -46,9 +47,11 @@ KEY_DOWN_VALUE equ 0b1000000000000000
 segment .data
 g_std_handle dq 0
 g_head_x dq 10
-g_head_y dq 3
+g_head_y dq 10
 g_food_x dq 10
 g_food_y dq 5
+g_dir dq 4 ; right
+g_score dq 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -177,17 +180,23 @@ print_board:
   mov rbp, rsp
   sub rsp, 32
 
+  ; Reset position to 0, 0
+  mov rdx, 0
+  mov r8, 0
+  mov rcx, SEQ_POS
+  call printf
+
   mov [rbp + .r12_storage], r12
   mov [rbp + .r13_storage], r13
 
   xor r12, r12
   .height_loop:
-    cmp r12, [BOARD_HEIGHT]
+    cmp r12, BOARD_HEIGHT
     je .end_height_loop
 
     xor r13, r13
     .width_loop:
-      cmp r13, [BOARD_WIDTH]
+      cmp r13, BOARD_WIDTH
       je .end_width_loop
 
       .maybe_print_head:
@@ -226,6 +235,16 @@ print_board:
     jmp .height_loop
   .end_height_loop:
 
+  ; Print score
+  mov rdx, 0
+  mov r8, (BOARD_WIDTH * 2) + 2
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_SCORE
+  mov rdx, [g_score]
+  call printf
+
   mov r12, [rbp + .r12_storage]
   mov r13, [rbp + .r13_storage]
   mov rsp, rbp
@@ -233,52 +252,93 @@ print_board:
   ret
 
 
+reposition_fruit:
+  rdtsc
+  xor edx, edx
+  mov ecx, BOARD_WIDTH
+  div ecx
+  mov [g_food_x], edx
+
+  rdtsc
+  xor edx, edx
+  mov ecx, BOARD_HEIGHT
+  div ecx
+  mov [g_food_y], edx
+
+  ret
+
+
+reposition_head:
+  rdtsc
+  xor edx, edx
+  mov ecx, BOARD_WIDTH
+  div ecx
+  mov [g_head_x], edx
+
+  rdtsc
+  xor edx, edx
+  mov ecx, BOARD_HEIGHT
+  div ecx
+  mov [g_head_y], edx
+
+  ret
+
+
+update_game_data:
+  ; Move snake
+  cmp byte [g_dir], DIR_UP
+  jne .check_down
+  sub byte [g_head_y], 1
+
+  .check_down:
+  cmp byte [g_dir], DIR_DOWN
+  jne .check_left
+  add byte [g_head_y], 1
+
+  .check_left:
+  cmp byte [g_dir], DIR_LEFT
+  jne .check_right
+  sub byte [g_head_x], 1
+
+  .check_right:
+  cmp byte [g_dir], DIR_RIGHT
+  jne .end_checks
+  add byte [g_head_x], 1
+
+  .end_checks:
+
+  ; Check if we ate fruit
+  mov rcx, [g_head_x]
+  cmp rcx, [g_food_x]
+  jne .end_eat
+  mov rcx, [g_head_y]
+  cmp rcx, [g_food_y]
+  jne .end_eat
+  call reposition_fruit
+  inc qword [g_score]
+  jmp .end_eat
+
+  .end_eat:
+
+  ret
+
+
 main:
-.dir equ 16
   push rbp
   mov rbp, rsp
   sub rsp, 32
 
   call _CRT_INIT
 
-  ; Clear board and setup input
   call clear_screen
   call setup_input
-
-  ; Init data
-  mov byte [rbp + .dir], 4 ; right
+  call reposition_fruit
+  ; call reposition_head
 
   .loop:
-    ; Reset position to 0, 0
-    mov rdx, 0
-    mov r8, 0
-    mov rcx, SEQ_POS
-    call printf
-
     ; Print board
     call print_board
-
-    ; Move snake
-    cmp byte [rbp + .dir], DIR_UP
-    jne .check_down
-    sub byte [g_head_y], 1
-
-    .check_down:
-    cmp byte [rbp + .dir], DIR_DOWN
-    jne .check_left
-    add byte [g_head_y], 1
-
-    .check_left:
-    cmp byte [rbp + .dir], DIR_LEFT
-    jne .check_right
-    sub byte [g_head_x], 1
-
-    .check_right:
-    cmp byte [rbp + .dir], DIR_RIGHT
-    jne .end_checks
-    add byte [g_head_x], 1
-
-    .end_checks:
+    call update_game_data
 
     ; Check keys pressed
     mov rcx, VKEY_W
@@ -314,19 +374,19 @@ main:
     jmp .end_input
 
     .action_up:
-    mov byte [rbp + .dir], 1
+    mov byte [g_dir], 1
     jmp .end_input
 
     .action_down:
-    mov byte [rbp + .dir], 2
+    mov byte [g_dir], 2
     jmp .end_input
 
     .action_left:
-    mov byte [rbp + .dir], 3
+    mov byte [g_dir], 3
     jmp .end_input
 
     .action_right:
-    mov byte [rbp + .dir], 4
+    mov byte [g_dir], 4
     jmp .end_input
 
     .action_quit:
