@@ -288,22 +288,46 @@ update_game_data:
   ; Move snake
   cmp byte [g_dir], DIR_UP
   jne .check_down
+  cmp byte [g_head_y], 0
+  jne .move_up
+  mov byte [g_head_y], BOARD_HEIGHT - 1
+  jmp .end_checks
+  .move_up:
   sub byte [g_head_y], 1
+  jmp .end_checks
 
   .check_down:
   cmp byte [g_dir], DIR_DOWN
   jne .check_left
+  cmp byte [g_head_y], BOARD_HEIGHT - 1
+  jne .move_down
+  mov byte [g_head_y], 0
+  jmp .end_checks
+  .move_down:
   add byte [g_head_y], 1
+  jmp .end_checks
 
   .check_left:
   cmp byte [g_dir], DIR_LEFT
   jne .check_right
+  cmp byte [g_head_x], 0
+  jne .move_left
+  mov byte [g_head_x], BOARD_WIDTH - 1
+  jmp .end_checks
+  .move_left:
   sub byte [g_head_x], 1
+  jmp .end_checks
 
   .check_right:
   cmp byte [g_dir], DIR_RIGHT
   jne .end_checks
+  cmp byte [g_head_x], BOARD_WIDTH - 1
+  jne .move_right
+  mov byte [g_head_x], 0
+  jmp .end_checks
+  .move_right:
   add byte [g_head_x], 1
+  jmp .end_checks
 
   .end_checks:
 
