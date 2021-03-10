@@ -11,6 +11,7 @@ NEWLINE db 0xd, 0xa, 0
 BOARD_ICON_EMPTY db ". ", 0
 BOARD_ICON_FOOD db "* ", 0
 BOARD_ICON_HEAD db "O ", 0
+BOARD_ICON_TAIL db "x ", 0
 FMT_INT db "%d", 0xd, 0xa, 0
 FMT_SHORT db "%hd", 0xd, 0xa, 0
 FMT_UINT db "%u", 0xd, 0xa, 0
@@ -45,6 +46,7 @@ KEY_DOWN_VALUE equ 0b1000000000000000
 BASE_WAIT_TIME equ 50
 MIN_WAIT_TIME equ 5
 SPEED_INCREMENT equ 1
+SNAKE_MAX_LENGTH equ 32
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -56,7 +58,8 @@ g_food_x dq 10
 g_food_y dq 5
 g_dir dq 4 ; right
 g_score dq 0
-g_speed db 0
+g_speed dq 0
+g_snake_length dq 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -178,21 +181,27 @@ print_char: ; (x, y, char)
 
 
 
-print_board:
+print_board: ; (tail_addr)
+; rbp +
 .r12_storage equ 16
 .r13_storage equ 24
+.r14_storage equ 32
+; rsp +
+.tail_addr equ 32
   push rbp
   mov rbp, rsp
-  sub rsp, 32
+  sub rsp, 32 + 64
+
+  mov [rbp + .r12_storage], r12
+  mov [rbp + .r13_storage], r13
+  mov [rbp + .r14_storage], r14
+  mov [rsp + .tail_addr], rcx
 
   ; Reset position to 0, 0
   mov rdx, 0
   mov r8, 0
   mov rcx, SEQ_POS
   call printf
-
-  mov [rbp + .r12_storage], r12
-  mov [rbp + .r13_storage], r13
 
   xor r12, r12
   .height_loop:
@@ -215,12 +224,35 @@ print_board:
 
       .maybe_print_food:
       cmp r13, [g_food_x]
-      jne .print_empty
+      jne .maybe_print_tail
       cmp r12, [g_food_y]
-      jne .print_empty
+      jne .maybe_print_tail
       mov rcx, BOARD_ICON_FOOD
       call printf
       jmp .end_print
+
+      .maybe_print_tail:
+      mov r14, 0
+      .loop_tail:
+        cmp r14, [g_snake_length]
+        je .end_tail_loop
+
+        mov rax, r14
+        xor edx, edx
+        mov ecx, 16
+        mul ecx ; [r14 (index)] * 16
+        add rax, [rsp + .tail_addr]
+        cmp r13, [rax]
+        jne .no_tail_match
+        add rax, 8
+        cmp r14, [rax]
+        jne .no_tail_match
+        mov rcx, BOARD_ICON_TAIL
+        call printf
+        .no_tail_match:
+        inc r14
+
+      .end_tail_loop:
 
       .print_empty:
       mov rcx, BOARD_ICON_EMPTY
@@ -271,6 +303,7 @@ print_board:
 
   mov r12, [rbp + .r12_storage]
   mov r13, [rbp + .r13_storage]
+  mov r13, [rbp + .r14_storage]
   mov rsp, rbp
   pop rbp
   ret
@@ -308,7 +341,9 @@ reposition_head:
   ret
 
 
-update_game_data:
+update_game_data: ; (tail_addr)
+  mov r8, rcx
+
   ; Move snake
   cmp byte [g_dir], DIR_UP
   jne .check_down
@@ -356,18 +391,31 @@ update_game_data:
   .end_checks:
 
   ; Check if we ate fruit
+  mov rdx, [g_head_x]
+  cmp rdx, [g_food_x]
+  jne .end_eat
+  mov rdx, [g_head_y]
+  cmp rdx, [g_food_y]
+  jne .end_eat
+
+  mov eax, [g_snake_length]
+  xor edx, edx
+  mov ecx, 16
+  mul ecx ; [g_snake_length] * 16
+  add rax, r8
   mov rcx, [g_head_x]
-  cmp rcx, [g_food_x]
-  jne .end_eat
+  mov [rax], rcx
   mov rcx, [g_head_y]
-  cmp rcx, [g_food_y]
-  jne .end_eat
+  mov [rax + 8], rcx
+  inc qword [g_snake_length]
+
   call reposition_fruit
   inc qword [g_score]
-  cmp byte [g_speed], BASE_WAIT_TIME - MIN_WAIT_TIME - SPEED_INCREMENT
+  cmp qword [g_speed], BASE_WAIT_TIME - MIN_WAIT_TIME - SPEED_INCREMENT
   jg .end_wait_change
-  add byte [g_speed], SPEED_INCREMENT
+  add qword [g_speed], SPEED_INCREMENT
   .end_wait_change:
+
   jmp .end_eat
 
   .end_eat:
@@ -378,7 +426,7 @@ update_game_data:
 main:
   push rbp
   mov rbp, rsp
-  sub rsp, 32
+  sub rsp, 32 + 512
 
   call _CRT_INIT
 
@@ -388,8 +436,12 @@ main:
   ; call reposition_head
 
   .loop:
-    ; Print board
+    mov rcx, rsp
+    add rcx, 32
     call print_board
+
+    mov rcx, rsp
+    add rcx, 32
     call update_game_data
 
     ; Check keys pressed
