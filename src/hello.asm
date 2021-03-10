@@ -245,12 +245,14 @@ print_board: ; (tail_addr)
         cmp r13, [rax]
         jne .no_tail_match
         add rax, 8
-        cmp r14, [rax]
+        cmp r12, [rax]
         jne .no_tail_match
         mov rcx, BOARD_ICON_TAIL
         call printf
+        jmp .end_print
         .no_tail_match:
         inc r14
+        jmp .loop_tail
 
       .end_tail_loop:
 
