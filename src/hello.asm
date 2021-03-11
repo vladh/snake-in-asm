@@ -19,6 +19,7 @@ FMT_CHAR db "%c", 0xd, 0xa, 0
 FMT_STRING db "%s", 0xd, 0xa, 0
 FMT_SCORE db "Score: %d", 0xd, 0xa, 0
 FMT_SPEED db "Speed: %d%%", 0xd, 0xa, 0
+FMT_LENGTH db "Length: %d", 0xd, 0xa, 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
@@ -146,8 +147,8 @@ clear_screen:
   mov rbp, rsp
   sub rsp, 32
 
-  mov rdx, 0
-  mov r8, 0
+  mov rdx, 1
+  mov r8, 1
   mov rcx, SEQ_POS
   call printf
 
@@ -197,9 +198,9 @@ print_board: ; (tail_addr)
   mov [rbp + .r14_storage], r14
   mov [rsp + .tail_addr], rcx
 
-  ; Reset position to 0, 0
-  mov rdx, 0
-  mov r8, 0
+  ; Reset position to 1, 1
+  mov rdx, 1
+  mov r8, 1
   mov rcx, SEQ_POS
   call printf
 
@@ -275,7 +276,7 @@ print_board: ; (tail_addr)
   .end_height_loop:
 
   ; Print score
-  mov rdx, 0
+  mov rdx, 1
   mov r8, (BOARD_WIDTH * 2) + 2
   mov rcx, SEQ_POS
   call printf
@@ -301,6 +302,16 @@ print_board: ; (tail_addr)
 
   mov rcx, FMT_SPEED
   mov edx, eax
+  call printf
+
+  ; Print length
+  mov rdx, 3
+  mov r8, (BOARD_WIDTH * 2) + 2
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_LENGTH
+  mov rdx, [g_snake_length]
   call printf
 
   mov r12, [rbp + .r12_storage]
@@ -345,6 +356,44 @@ reposition_head:
 
 update_game_data: ; (tail_addr)
   mov r8, rcx
+
+  ; Update snake tail
+  cmp qword [g_snake_length], 0
+  je .end_tail_update
+
+  ; We basically want to move the tail position from index r9 to index r9 + 1
+  mov r9, [g_snake_length]
+  sub r9, 1
+
+  ; Calculate tail memory address
+  mov eax, r9d
+  xor edx, edx
+  mov ecx, 16
+  mul ecx
+  add rax, r8 ; rax = ([g_snake_length] * 16) + tail_addr
+
+  .loop_tail:
+    cmp r9, 0
+    jne .update_tail_segment
+    ; Update first tail segment (to replace old head)
+    mov rcx, [g_head_x]
+    mov [rax], rcx
+    mov rcx, [g_head_y]
+    mov [rax + 8], rcx
+    jmp .end_tail_update
+
+    .update_tail_segment:
+    ; Update tail segment
+    ; Move segment n to segment n + 1
+    mov rcx, [rax]
+    mov [rax + 16], rcx
+    mov rcx, [rax + 8]
+    mov [rax + 16 + 8], rcx
+
+    dec r9
+    sub rax, 16
+    jmp .loop_tail
+  .end_tail_update:
 
   ; Move snake
   cmp byte [g_dir], DIR_UP
@@ -400,17 +449,7 @@ update_game_data: ; (tail_addr)
   cmp rdx, [g_food_y]
   jne .end_eat
 
-  mov eax, [g_snake_length]
-  xor edx, edx
-  mov ecx, 16
-  mul ecx ; [g_snake_length] * 16
-  add rax, r8
-  mov rcx, [g_head_x]
-  mov [rax], rcx
-  mov rcx, [g_head_y]
-  mov [rax + 8], rcx
   inc qword [g_snake_length]
-
   call reposition_fruit
   inc qword [g_score]
   cmp qword [g_speed], BASE_WAIT_TIME - MIN_WAIT_TIME - SPEED_INCREMENT
