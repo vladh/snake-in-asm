@@ -20,8 +20,13 @@ FMT_STRING db "%s", 0xd, 0xa, 0
 FMT_SCORE db "Score: %d", 0
 FMT_SPEED db "Speed: %d%%", 0
 FMT_LENGTH db "Length: %d", 0
+FMT_CONTROLS_MOVEMENT db "WASD to move", 0
+FMT_CONTROLS_QUIT db "Q to quit", 0
 FMT_GAME db "GAME", 0
 FMT_OVER db "OVER", 0
+FMT_END_SCORE db "Your score was: %d", 0
+FMT_RATING_1 db "Sucks to suck!", 0
+FMT_RATING_2 db "A Snake god.", 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
@@ -347,6 +352,26 @@ print_board: ; (tail_addr)
   mov rdx, [g_snake_length]
   call printf
 
+  ; Print controls
+  mov rdx, 4
+  mov r8, (BOARD_WIDTH * 2) + 2
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_CONTROLS_MOVEMENT
+  mov rdx, [g_snake_length]
+  call printf
+
+  mov rdx, 5
+  mov r8, (BOARD_WIDTH * 2) + 2
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_CONTROLS_QUIT
+  mov rdx, [g_snake_length]
+  call printf
+
+  ; Clean up
   mov r12, [rbp + .r12_storage]
   mov r13, [rbp + .r13_storage]
   mov r13, [rbp + .r14_storage]
@@ -582,12 +607,53 @@ print_game_over:
   mov rbp, rsp
   sub rsp, 64
 
+  ; Print game over stuff
+  ; NOTE: When we move to BOARD_WIDTH below, keep in mind that our characters
+  ; are 2-wide, so BOARD_WIDTH will be half the effective width.
+  mov rdx, (BOARD_HEIGHT / 2)
+  mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
+  mov rcx, SEQ_POS
+  call printf
+
   mov rcx, FMT_GAME
+  call printf
+
+  mov rdx, (BOARD_HEIGHT / 2) + 1
+  mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
+  mov rcx, SEQ_POS
   call printf
 
   mov rcx, FMT_OVER
   call printf
 
+  mov rdx, (BOARD_HEIGHT / 2) + 2
+  mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_END_SCORE
+  mov rdx, [g_score]
+  call printf
+
+  mov rdx, (BOARD_HEIGHT / 2) + 3
+  mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
+  mov rcx, SEQ_POS
+  call printf
+
+  cmp qword [g_score], 10
+  jge .print_rating_2
+  mov rcx, FMT_RATING_1
+  call printf
+  jmp .end_print_rating
+
+  .print_rating_2:
+  mov rcx, FMT_RATING_2
+  call printf
+  jmp .end_print_rating
+
+  .end_print_rating:
+
+  ; Wait for the user to press something
   mov rcx, [g_std_handle] ; hConsoleInput
   lea rdx, [rbp + .scratch1] ; lpBuffer
   mov r8, 1 ; nNumberOfChartsToRead
