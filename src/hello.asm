@@ -53,6 +53,7 @@ DIR_RIGHT equ 4
 KEY_DOWN_VALUE equ 0b1000000000000000
 BASE_WAIT_TIME equ 50
 MIN_WAIT_TIME equ 5
+GAME_OVER_WAIT_TIME equ 2000
 SPEED_INCREMENT equ 1
 SNAKE_MAX_LENGTH equ 32
 
@@ -653,6 +654,12 @@ print_game_over:
 
   .end_print_rating:
 
+  mov rcx, GAME_OVER_WAIT_TIME
+  call Sleep
+
+  ; Ignore any keys pressed until now
+  call flush_input_buffer
+
   ; Wait for the user to press something
   mov rcx, [g_std_handle] ; hConsoleInput
   lea rdx, [rbp + .scratch1] ; lpBuffer
@@ -703,10 +710,7 @@ main:
   jmp .cleanup
 
   .game_over:
-  call flush_input_buffer
   call print_game_over
-  call reset_input
-  jmp .end
 
   .cleanup:
   call flush_input_buffer
