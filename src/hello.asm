@@ -9,7 +9,7 @@ BOARD_HEIGHT equ 30
 BOARD_WIDTH equ 45
 NEWLINE db 0xd, 0xa, 0
 BOARD_ICON_EMPTY db ". ", 0
-BOARD_ICON_FOOD db "* ", 0
+BOARD_ICON_FRUIT db "* ", 0
 BOARD_ICON_HEAD db "O ", 0
 BOARD_ICON_TAIL db "x ", 0
 FMT_INT db "%d", 0xd, 0xa, 0
@@ -57,8 +57,8 @@ segment .data
 g_std_handle dq 0
 g_head_x dq 10
 g_head_y dq 10
-g_food_x dq 10
-g_food_y dq 5
+g_fruit_x dq 10
+g_fruit_y dq 5
 g_dir dq 4 ; right
 g_score dq 0
 g_speed dq 0
@@ -249,19 +249,19 @@ print_board: ; (tail_addr)
 
       .maybe_print_head:
       cmp r13, [g_head_x]
-      jne .maybe_print_food
+      jne .maybe_print_fruit
       cmp r12, [g_head_y]
-      jne .maybe_print_food
+      jne .maybe_print_fruit
       mov rcx, BOARD_ICON_HEAD
       call printf
       jmp .end_print
 
-      .maybe_print_food:
-      cmp r13, [g_food_x]
+      .maybe_print_fruit:
+      cmp r13, [g_fruit_x]
       jne .maybe_print_tail
-      cmp r12, [g_food_y]
+      cmp r12, [g_fruit_y]
       jne .maybe_print_tail
-      mov rcx, BOARD_ICON_FOOD
+      mov rcx, BOARD_ICON_FRUIT
       call printf
       jmp .end_print
 
@@ -360,13 +360,13 @@ reposition_fruit:
   xor edx, edx
   mov ecx, BOARD_WIDTH
   div ecx
-  mov [g_food_x], edx
+  mov [g_fruit_x], edx
 
   rdtsc
   xor edx, edx
   mov ecx, BOARD_HEIGHT
   div ecx
-  mov [g_food_y], edx
+  mov [g_fruit_y], edx
 
   ret
 
@@ -486,10 +486,10 @@ update_game_data: ; (tail_addr)
 check_if_we_ate_and_update_length:
   ; Check if we ate fruit
   mov rdx, [g_head_x]
-  cmp rdx, [g_food_x]
+  cmp rdx, [g_fruit_x]
   jne .end_eat
   mov rdx, [g_head_y]
-  cmp rdx, [g_food_y]
+  cmp rdx, [g_fruit_y]
   jne .end_eat
 
   inc qword [g_snake_length]
