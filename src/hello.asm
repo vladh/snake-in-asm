@@ -443,6 +443,10 @@ update_game_data: ; (tail_addr)
 
   .end_checks:
 
+  ret
+
+
+check_if_we_ate_and_update_length:
   ; Check if we ate fruit
   mov rdx, [g_head_x]
   cmp rdx, [g_food_x]
@@ -458,8 +462,6 @@ update_game_data: ; (tail_addr)
   jg .end_wait_change
   add qword [g_speed], SPEED_INCREMENT
   .end_wait_change:
-
-  jmp .end_eat
 
   .end_eat:
 
@@ -547,11 +549,13 @@ main:
   .loop:
     mov rcx, rsp
     add rcx, 32
-    call print_board
+    call update_game_data
 
     mov rcx, rsp
     add rcx, 32
-    call update_game_data
+    call print_board
+
+    call check_if_we_ate_and_update_length
 
     call process_inputs
     cmp rax, 1
