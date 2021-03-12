@@ -17,9 +17,11 @@ FMT_SHORT db "%hd", 0xd, 0xa, 0
 FMT_UINT db "%u", 0xd, 0xa, 0
 FMT_CHAR db "%c", 0xd, 0xa, 0
 FMT_STRING db "%s", 0xd, 0xa, 0
-FMT_SCORE db "Score: %d", 0xd, 0xa, 0
-FMT_SPEED db "Speed: %d%%", 0xd, 0xa, 0
-FMT_LENGTH db "Length: %d", 0xd, 0xa, 0
+FMT_SCORE db "Score: %d", 0
+FMT_SPEED db "Speed: %d%%", 0
+FMT_LENGTH db "Length: %d", 0
+FMT_GAME db "GAME", 0
+FMT_OVER db "OVER", 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
@@ -88,6 +90,21 @@ extern ExitProcess
 ; );
 extern Sleep
 
+; BOOL WINAPI SetConsoleMode(
+;   _In_ HANDLE hConsoleHandle,
+;   _In_ DWORD  dwMode
+; );
+extern SetConsoleMode
+
+; BOOL WINAPI ReadConsole(
+;   _In_     HANDLE  hConsoleInput,
+;   _Out_    LPVOID  lpBuffer,
+;   _In_     DWORD   nNumberOfCharsToRead,
+;   _Out_    LPDWORD lpNumberOfCharsRead,
+;   _In_opt_ LPVOID  pInputControl
+; );
+extern ReadConsoleA
+
 ; SHORT GetAsyncKeyState(
 ;   int vKey
 ; );
@@ -114,9 +131,30 @@ setup_input:
   call GetStdHandle
   mov [g_std_handle], rax
 
+  ; Disable echoing input and other such things, so that we don't print stuff
+  ; out when we're reading characters.
+  mov rcx, [g_std_handle]
+  mov rdx, 0
+  call SetConsoleMode
+
   ; Hide the cursor
   mov rcx, SEQ_HIDE_CURSOR
   call printf
+
+  mov rsp, rbp
+  pop rbp
+  ret
+
+
+flush_input_buffer:
+  push rbp
+  mov rbp, rsp
+  sub rsp, 32
+
+  ; Flush buffer so we don't get a bunch of characters printed
+  ; This is apparently bad/deprecated, but do we care? No!
+  mov rcx, [g_std_handle]
+  call FlushConsoleInputBuffer
 
   mov rsp, rbp
   pop rbp
@@ -127,11 +165,6 @@ reset_input:
   push rbp
   mov rbp, rsp
   sub rsp, 32
-
-  ; Flush buffer so we don't get a bunch of characters printed
-  ; This is apparently bad/deprecated, but do we care? No!
-  mov rcx, [g_std_handle]
-  call FlushConsoleInputBuffer
 
   ; Switch back to main buffer
   mov rcx, SEQ_USE_MAIN_BUFFER
@@ -338,22 +371,6 @@ reposition_fruit:
   ret
 
 
-reposition_head:
-  rdtsc
-  xor edx, edx
-  mov ecx, BOARD_WIDTH
-  div ecx
-  mov [g_head_x], edx
-
-  rdtsc
-  xor edx, edx
-  mov ecx, BOARD_HEIGHT
-  div ecx
-  mov [g_head_y], edx
-
-  ret
-
-
 update_game_data: ; (tail_addr)
   mov r8, rcx
 
@@ -387,6 +404,19 @@ update_game_data: ; (tail_addr)
     .update_tail_segment:
     ; Update tail segment
     ; Move segment n to segment n + 1
+
+    ; But first, has this tail piece collided with the head?
+    mov rcx, [g_head_x]
+    cmp rcx, [rax]
+    jne .can_update_tail_segment
+    mov rcx, [g_head_y]
+    cmp rcx, [rax + 8]
+    jne .can_update_tail_segment
+    ; Oops, they collided!
+    jmp .finish_with_game_over
+
+    ; Ok, we're good, we can move the segment now
+    .can_update_tail_segment:
     mov rcx, [rax - 16]
     mov [rax], rcx
     mov rcx, [rax - 16 + 8]
@@ -442,6 +472,13 @@ update_game_data: ; (tail_addr)
   jmp .end_checks
 
   .end_checks:
+  xor rax, rax
+  jmp .finish_update
+
+  .finish_with_game_over:
+  mov rax, 1
+
+  .finish_update:
 
   ret
 
@@ -535,6 +572,34 @@ process_inputs:
   ret
 
 
+print_game_over:
+; rbp +
+.scratch1 equ 16
+.scratch2 equ 24
+; rsp +
+.pInputControl equ 32
+  push rbp
+  mov rbp, rsp
+  sub rsp, 64
+
+  mov rcx, FMT_GAME
+  call printf
+
+  mov rcx, FMT_OVER
+  call printf
+
+  mov rcx, [g_std_handle] ; hConsoleInput
+  lea rdx, [rbp + .scratch1] ; lpBuffer
+  mov r8, 1 ; nNumberOfChartsToRead
+  lea r9, [rbp + .scratch2] ; lpNumberOfCharsToRead
+  mov byte [rsp + .pInputControl], 0 ; pInputControl
+  call ReadConsoleA
+
+  mov rsp, rbp
+  pop rbp
+  ret
+
+
 main:
   push rbp
   mov rbp, rsp
@@ -551,6 +616,9 @@ main:
     add rcx, 32
     call update_game_data
 
+    cmp rax, 1
+    je .game_over
+
     mov rcx, rsp
     add rcx, 32
     call print_board
@@ -566,8 +634,18 @@ main:
     call Sleep
     jmp .loop
   .end_loop:
+  jmp .cleanup
 
+  .game_over:
+  call flush_input_buffer
+  call print_game_over
   call reset_input
+  jmp .end
+
+  .cleanup:
+  call flush_input_buffer
+  call reset_input
+  jmp .end
 
   .end:
 
