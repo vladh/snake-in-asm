@@ -361,7 +361,9 @@ update_game_data: ; (tail_addr)
   cmp qword [g_snake_length], 0
   je .end_tail_update
 
-  ; We basically want to move the tail position from index r9 to index r9 + 1
+  ; We want to move the tail position from index r9 - 1 to index r9
+  ; The index, r9, is in [0, g_snake_length - 1]
+  ; If r9 == 0, we copy from the head to the first tail position
   mov r9, [g_snake_length]
   sub r9, 1
 
@@ -385,10 +387,10 @@ update_game_data: ; (tail_addr)
     .update_tail_segment:
     ; Update tail segment
     ; Move segment n to segment n + 1
-    mov rcx, [rax]
-    mov [rax + 16], rcx
-    mov rcx, [rax + 8]
-    mov [rax + 16 + 8], rcx
+    mov rcx, [rax - 16]
+    mov [rax], rcx
+    mov rcx, [rax - 16 + 8]
+    mov [rax + 8], rcx
 
     dec r9
     sub rax, 16
@@ -464,6 +466,73 @@ update_game_data: ; (tail_addr)
   ret
 
 
+process_inputs:
+  push rbp
+  mov rbp, rsp
+  sub rsp, 32
+
+  ; Check keys pressed
+  mov rcx, VKEY_W
+  call GetAsyncKeyState
+  and rax, KEY_DOWN_VALUE
+  cmp rax, 0
+  jne .action_up
+
+  mov rcx, VKEY_S
+  call GetAsyncKeyState
+  and rax, KEY_DOWN_VALUE
+  cmp rax, 0
+  jne .action_down
+
+  mov rcx, VKEY_A
+  call GetAsyncKeyState
+  and rax, KEY_DOWN_VALUE
+  cmp rax, 0
+  jne .action_left
+
+  mov rcx, VKEY_D
+  call GetAsyncKeyState
+  and rax, KEY_DOWN_VALUE
+  cmp rax, 0
+  jne .action_right
+
+  mov rcx, VKEY_Q
+  call GetAsyncKeyState
+  and rax, KEY_DOWN_VALUE
+  cmp rax, 0
+  jne .action_quit
+
+  jmp .end_input
+
+  .action_up:
+  mov byte [g_dir], 1
+  jmp .end_input
+
+  .action_down:
+  mov byte [g_dir], 2
+  jmp .end_input
+
+  .action_left:
+  mov byte [g_dir], 3
+  jmp .end_input
+
+  .action_right:
+  mov byte [g_dir], 4
+  jmp .end_input
+
+  .action_quit:
+  mov rax, 1
+  jmp .return_input
+
+  .end_input:
+  xor rax, rax
+
+  .return_input:
+  mov rsp, rbp
+  pop rbp
+  ret
+
+
 main:
   push rbp
   mov rbp, rsp
@@ -474,7 +543,6 @@ main:
   call clear_screen
   call setup_input
   call reposition_fruit
-  ; call reposition_head
 
   .loop:
     mov rcx, rsp
@@ -485,59 +553,9 @@ main:
     add rcx, 32
     call update_game_data
 
-    ; Check keys pressed
-    mov rcx, VKEY_W
-    call GetAsyncKeyState
-    and rax, KEY_DOWN_VALUE
-    cmp rax, 0
-    jne .action_up
-
-    mov rcx, VKEY_S
-    call GetAsyncKeyState
-    and rax, KEY_DOWN_VALUE
-    cmp rax, 0
-    jne .action_down
-
-    mov rcx, VKEY_A
-    call GetAsyncKeyState
-    and rax, KEY_DOWN_VALUE
-    cmp rax, 0
-    jne .action_left
-
-    mov rcx, VKEY_D
-    call GetAsyncKeyState
-    and rax, KEY_DOWN_VALUE
-    cmp rax, 0
-    jne .action_right
-
-    mov rcx, VKEY_Q
-    call GetAsyncKeyState
-    and rax, KEY_DOWN_VALUE
-    cmp rax, 0
-    jne .action_quit
-
-    jmp .end_input
-
-    .action_up:
-    mov byte [g_dir], 1
-    jmp .end_input
-
-    .action_down:
-    mov byte [g_dir], 2
-    jmp .end_input
-
-    .action_left:
-    mov byte [g_dir], 3
-    jmp .end_input
-
-    .action_right:
-    mov byte [g_dir], 4
-    jmp .end_input
-
-    .action_quit:
-    jmp .end_loop
-
-    .end_input:
+    call process_inputs
+    cmp rax, 1
+    je .end_loop
 
     mov rcx, BASE_WAIT_TIME
     sub rcx, [g_speed]
@@ -545,7 +563,6 @@ main:
     jmp .loop
   .end_loop:
 
-  ; call clear_screen
   call reset_input
 
   .end:
