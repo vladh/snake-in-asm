@@ -27,14 +27,14 @@ FMT_RATING_1 db "Sucks to suck!", 0
 FMT_RATING_2 db "A Snake god.", 0
 FMT_PRESS_ANY_KEY db "Press any key to exit.", 0
 BOARD_ICON_EMPTY db ". ", 0
-BOARD_ICON_FRUIT db 0x1b, 0x5b, "31m", "* ", 0x1b, 0x5b, "0m", 0
-BOARD_ICON_HEAD db 0x1b, 0x5b, "32m", "O ", 0x1b, 0x5b, "0m", 0
-BOARD_ICON_TAIL db 0x1b, 0x5b, "32m", "x ", 0x1b, 0x5b, "0m", 0
+BOARD_ICON_FRUIT db 0x1b, 0x5b, "91m", "* ", 0x1b, 0x5b, "0m", 0
+BOARD_ICON_HEAD db 0x1b, 0x5b, "92m", "O ", 0x1b, 0x5b, "0m", 0
+BOARD_ICON_TAIL db 0x1b, 0x5b, "92m", "x ", 0x1b, 0x5b, "0m", 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
-SEQ_BLUE db 0x1b, 0x5b, "34m", 0
-SEQ_GREEN db 0x1b, 0x5b, "32m", 0
-SEQ_RED db 0x1b, 0x5b, "31m", 0
+SEQ_BLUE db 0x1b, 0x5b, "94m", 0
+SEQ_GREEN db 0x1b, 0x5b, "92m", 0
+SEQ_RED db 0x1b, 0x5b, "91m", 0
 SEQ_RESET db 0x1b, 0x5b, "0m", 0
 SEQ_HIDE_CURSOR db 0x1b, 0x5b, "?25l", 0
 SEQ_SHOW_CURSOR db 0x1b, 0x5b, "?25h", 0
