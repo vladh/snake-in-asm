@@ -27,6 +27,7 @@ FMT_OVER db "OVER", 0
 FMT_END_SCORE db "Your score was: %d", 0
 FMT_RATING_1 db "Sucks to suck!", 0
 FMT_RATING_2 db "A Snake god.", 0
+FMT_PRESS_ANY_KEY db "Press any key to exit.", 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
@@ -53,7 +54,7 @@ DIR_RIGHT equ 4
 KEY_DOWN_VALUE equ 0b1000000000000000
 BASE_WAIT_TIME equ 50
 MIN_WAIT_TIME equ 5
-GAME_OVER_WAIT_TIME equ 3000
+GAME_OVER_WAIT_TIME equ 2500
 SPEED_INCREMENT equ 1
 SNAKE_MAX_LENGTH equ 32
 
@@ -141,6 +142,8 @@ setup_input:
   ; out when we're reading characters.
   mov rcx, [g_std_handle]
   mov rdx, 0
+  or rdx, 0x0200 ; ENABLE_VIRTUAL_TERMINAL_INPUT
+  or rdx, 0x0004 ; ENABLE_VIRTUAL_TERMINAL_PROCESSING0
   call SetConsoleMode
 
   ; Hide the cursor
@@ -197,28 +200,6 @@ clear_screen:
   mov rsp, rbp
   pop rbp
   ret
-
-
-
-print_char: ; (x, y, char)
-.char equ 16
-  push rbp
-  mov rbp, rsp
-  sub rsp, 32
-
-  mov [rbp + .char], r8
-
-  mov r8, rcx
-  mov rcx, SEQ_POS
-  call printf
-
-  mov rcx, [rbp + .char]
-  call printf
-
-  mov rsp, rbp
-  pop rbp
-  ret
-
 
 
 print_board: ; (tail_addr)
@@ -659,6 +640,15 @@ print_game_over:
 
   ; Ignore any keys pressed until now
   call flush_input_buffer
+
+  mov rdx, (BOARD_HEIGHT / 2) + 4
+  mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_PRESS_ANY_KEY
+  mov rdx, [g_score]
+  call printf
 
   ; Wait for the user to press something
   mov rcx, [g_std_handle] ; hConsoleInput
