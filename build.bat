@@ -6,14 +6,14 @@ if not defined DevEnvDir (
 
 echo Compiling...
 
-nasm -f win64 -gcv8 -l obj/hello.lst -o obj/hello.obj src/hello.asm
+nasm -f win64 -gcv8 -l obj/snake.lst -o obj/snake.obj src/snake.asm
 
 echo Linking...
 
-link obj/hello.obj ^
+link obj/snake.obj ^
 /subsystem:console ^
 /entry:main ^
-/out:bin/hello.exe ^
+/out:bin/snake.exe ^
 /defaultlib:ucrt.lib ^
 /defaultlib:msvcrt.lib ^
 /defaultlib:legacy_stdio_definitions.lib ^
@@ -24,4 +24,4 @@ link obj/hello.obj ^
 /incremental:no ^
 /opt:noref ^
 /debug ^
-/pdb:"bin\hello.pdb"
+/pdb:"bin\snake.pdb"

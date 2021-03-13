@@ -1,3 +1,3 @@
 @echo off
 
-bin\hello.exe
+bin\snake.exe

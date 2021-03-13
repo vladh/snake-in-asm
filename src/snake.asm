@@ -5,18 +5,16 @@ default rel
 
 segment .rodata
 
-BOARD_HEIGHT equ 30
+BOARD_HEIGHT equ 28
 BOARD_WIDTH equ 45
 NEWLINE db 0xd, 0xa, 0
-BOARD_ICON_EMPTY db ". ", 0
-BOARD_ICON_FRUIT db "* ", 0
-BOARD_ICON_HEAD db "O ", 0
-BOARD_ICON_TAIL db "x ", 0
 FMT_INT db "%d", 0xd, 0xa, 0
 FMT_SHORT db "%hd", 0xd, 0xa, 0
 FMT_UINT db "%u", 0xd, 0xa, 0
 FMT_CHAR db "%c", 0xd, 0xa, 0
 FMT_STRING db "%s", 0xd, 0xa, 0
+FMT_TITLE db "Snake in x64 asm", 0
+FMT_AUTHOR db "By vladh", 0
 FMT_SCORE db "Score: %d", 0
 FMT_SPEED db "Speed: %d%%", 0
 FMT_LENGTH db "Length: %d", 0
@@ -28,15 +26,22 @@ FMT_END_SCORE db "Your score was: %d", 0
 FMT_RATING_1 db "Sucks to suck!", 0
 FMT_RATING_2 db "A Snake god.", 0
 FMT_PRESS_ANY_KEY db "Press any key to exit.", 0
+BOARD_ICON_EMPTY db ". ", 0
+BOARD_ICON_FRUIT db 0x1b, 0x5b, "31m", "* ", 0x1b, 0x5b, "0m", 0
+BOARD_ICON_HEAD db 0x1b, 0x5b, "32m", "O ", 0x1b, 0x5b, "0m", 0
+BOARD_ICON_TAIL db 0x1b, 0x5b, "32m", "x ", 0x1b, 0x5b, "0m", 0
 SEQ_CLEAR db 0x1b, 0x5b, "2J", 0
 SEQ_POS db 0x1b, 0x5b, "%d;%dH", 0
 SEQ_BLUE db 0x1b, 0x5b, "34m", 0
+SEQ_GREEN db 0x1b, 0x5b, "32m", 0
+SEQ_RED db 0x1b, 0x5b, "31m", 0
 SEQ_RESET db 0x1b, 0x5b, "0m", 0
 SEQ_HIDE_CURSOR db 0x1b, 0x5b, "?25l", 0
 SEQ_SHOW_CURSOR db 0x1b, 0x5b, "?25h", 0
 SEQ_USE_ALT_BUFFER db 0x1b, 0x5b, "?1049h", 0
 SEQ_USE_MAIN_BUFFER db 0x1b, 0x5b, "?1049l", 0
 STD_INPUT_HANDLE dq -10
+STD_OUTPUT_HANDLE dq -11
 INPUT_UP db "w"
 INPUT_DOWN db "s"
 INPUT_LEFT db "a"
@@ -61,7 +66,8 @@ SNAKE_MAX_LENGTH equ 32
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 segment .data
-g_std_handle dq 0
+g_std_input_handle dq 0
+g_std_output_handle dq 0
 g_head_x dq 10
 g_head_y dq 10
 g_fruit_x dq 10
@@ -136,14 +142,27 @@ setup_input:
   ; Get the standard input handle
   mov rcx, [STD_INPUT_HANDLE] ; nStdHandle
   call GetStdHandle
-  mov [g_std_handle], rax
+  mov [g_std_input_handle], rax
 
+  ; Get the standard output handle
+  mov rcx, [STD_OUTPUT_HANDLE] ; nStdHandle
+  call GetStdHandle
+  mov [g_std_output_handle], rax
+
+  ; Set console mode.
   ; Disable echoing input and other such things, so that we don't print stuff
   ; out when we're reading characters.
-  mov rcx, [g_std_handle]
+  ; However, preserve virtual terminal sequences.
+  mov rcx, [g_std_input_handle]
   mov rdx, 0
   or rdx, 0x0200 ; ENABLE_VIRTUAL_TERMINAL_INPUT
-  or rdx, 0x0004 ; ENABLE_VIRTUAL_TERMINAL_PROCESSING0
+  call SetConsoleMode
+
+  mov rcx, [g_std_output_handle]
+  mov rdx, 0
+  or rdx, 0x0004 ; ENABLE_VIRTUAL_TERMINAL_PROCESSING
+  or rdx, 0x0001 ; ENABLE_PROCESSED OUTPUT
+  or rdx, 0x0008 ; DISABLE_NEWLINE_AUTO_RETURN
   call SetConsoleMode
 
   ; Hide the cursor
@@ -162,7 +181,7 @@ flush_input_buffer:
 
   ; Flush buffer so we don't get a bunch of characters printed
   ; This is apparently bad/deprecated, but do we care? No!
-  mov rcx, [g_std_handle]
+  mov rcx, [g_std_input_handle]
   call FlushConsoleInputBuffer
 
   mov rsp, rbp
@@ -295,8 +314,32 @@ print_board: ; (tail_addr)
     jmp .height_loop
   .end_height_loop:
 
-  ; Print score
+  ; Get ready to print info
+  mov rcx, SEQ_BLUE
+  call printf
+
+  ; Print title
   mov rdx, 1
+  mov r8, (BOARD_WIDTH * 2) + 2
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_TITLE
+  mov rdx, [g_score]
+  call printf
+
+  ; Print author
+  mov rdx, 2
+  mov r8, (BOARD_WIDTH * 2) + 2
+  mov rcx, SEQ_POS
+  call printf
+
+  mov rcx, FMT_AUTHOR
+  mov rdx, [g_score]
+  call printf
+
+  ; Print score
+  mov rdx, 4
   mov r8, (BOARD_WIDTH * 2) + 2
   mov rcx, SEQ_POS
   call printf
@@ -306,7 +349,7 @@ print_board: ; (tail_addr)
   call printf
 
   ; Print speed
-  mov rdx, 2
+  mov rdx, 5
   mov r8, (BOARD_WIDTH * 2) + 2
   mov rcx, SEQ_POS
   call printf
@@ -325,7 +368,7 @@ print_board: ; (tail_addr)
   call printf
 
   ; Print length
-  mov rdx, 3
+  mov rdx, 6
   mov r8, (BOARD_WIDTH * 2) + 2
   mov rcx, SEQ_POS
   call printf
@@ -335,7 +378,7 @@ print_board: ; (tail_addr)
   call printf
 
   ; Print controls
-  mov rdx, 4
+  mov rdx, 7
   mov r8, (BOARD_WIDTH * 2) + 2
   mov rcx, SEQ_POS
   call printf
@@ -344,7 +387,7 @@ print_board: ; (tail_addr)
   mov rdx, [g_snake_length]
   call printf
 
-  mov rdx, 5
+  mov rdx, 8
   mov r8, (BOARD_WIDTH * 2) + 2
   mov rcx, SEQ_POS
   call printf
@@ -354,6 +397,9 @@ print_board: ; (tail_addr)
   call printf
 
   ; Clean up
+  mov rcx, SEQ_RESET
+  call printf
+
   mov r12, [rbp + .r12_storage]
   mov r13, [rbp + .r13_storage]
   mov r13, [rbp + .r14_storage]
@@ -592,6 +638,10 @@ print_game_over:
   ; Print game over stuff
   ; NOTE: When we move to BOARD_WIDTH below, keep in mind that our characters
   ; are 2-wide, so BOARD_WIDTH will be half the effective width.
+  mov rcx, SEQ_BLUE
+  call printf
+
+  ; Print "GAME"
   mov rdx, (BOARD_HEIGHT / 2)
   mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
   mov rcx, SEQ_POS
@@ -600,6 +650,7 @@ print_game_over:
   mov rcx, FMT_GAME
   call printf
 
+; Print "OVER"
   mov rdx, (BOARD_HEIGHT / 2) + 1
   mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
   mov rcx, SEQ_POS
@@ -608,6 +659,7 @@ print_game_over:
   mov rcx, FMT_OVER
   call printf
 
+  ; Print score
   mov rdx, (BOARD_HEIGHT / 2) + 2
   mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
   mov rcx, SEQ_POS
@@ -617,6 +669,7 @@ print_game_over:
   mov rdx, [g_score]
   call printf
 
+  ; Print rating
   mov rdx, (BOARD_HEIGHT / 2) + 3
   mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
   mov rcx, SEQ_POS
@@ -635,12 +688,15 @@ print_game_over:
 
   .end_print_rating:
 
+  ; Wait for a bit, so we don't accept a keypress right away, because that
+  ; would lead to the user accidentally pressing a key immediately.
   mov rcx, GAME_OVER_WAIT_TIME
   call Sleep
 
   ; Ignore any keys pressed until now
   call flush_input_buffer
 
+  ; Print the "press any key" message
   mov rdx, (BOARD_HEIGHT / 2) + 4
   mov r8, BOARD_WIDTH - (BOARD_WIDTH / 4)
   mov rcx, SEQ_POS
@@ -650,8 +706,12 @@ print_game_over:
   mov rdx, [g_score]
   call printf
 
+  ; We're done printing, reset colors
+  mov rcx, SEQ_RESET
+  call printf
+
   ; Wait for the user to press something
-  mov rcx, [g_std_handle] ; hConsoleInput
+  mov rcx, [g_std_input_handle] ; hConsoleInput
   lea rdx, [rbp + .scratch1] ; lpBuffer
   mov r8, 1 ; nNumberOfChartsToRead
   lea r9, [rbp + .scratch2] ; lpNumberOfCharsToRead
